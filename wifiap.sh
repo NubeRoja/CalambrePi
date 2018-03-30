@@ -1,13 +1,11 @@
-#!/bin/bash
+#!/bin/sh
 
 sudo apt-get update
 sudo apt-get install dnsmasq hostapd
 sudo service hostapd stop
 sudo service dnsmasq stop
 
-sudo cat >> /etc/dhcpcd.conf << EOF
-denyinterfaces wlan0
-EOF
+echo "denyinterfaces wlan0" | sudo tee -a /etc/dhcpcd.conf > /dev/null
 echo "dhcpcd.conf ok"
 
 sudo cat > /etc/network/interfaces.d/wlan0 << EOF
@@ -54,7 +52,7 @@ wpa=2
 # Use a pre-shared key
 wpa_key_mgmt=WPA-PSK
 # The network passphrase
-wpa_passphrase=C@l@mbr3P1
+wpa_passphrase=YOURPASSWORD
 # Use AES, instead of TKIP
 rsn_pairwise=CCMP
 #wpa_pairwise=CCMP
@@ -62,7 +60,7 @@ EOF
 
 sudo sed -i=back 's/#DAEMON_CONF=""/DAEMON_CONF="\/etc\/hostapd\/hostapd.conf"/g' /etc/default/hostapd
 
-sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig 
+sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig
 sudo cat > /etc/dnsmasq.conf << EOF
 interface=wlan0
 listen-address=192.168.20.1
@@ -72,6 +70,16 @@ server=8.8.4.4
 bogus-priv
 dhcp-range=192.168.20.10,192.168.20.20,255.255.255.0,12h
 EOF
+
+sudo sed -i -e 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/g' /etc/sysctl.conf
+sudo sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
+
+sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+sudo iptables -A FORWARD -i eth0 -o wlan0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+sudo iptables -A FORWARD -i wlan0 -o eth0 -j ACCEPT
+sudo sh -c "iptables-save > /etc/iptables.ipv4.nat"
+
+echo "iptables-restore < /etc/iptables.ipv4.nat" | sudo tee -a /etc/rc.local > /dev/null
 
 sudo service hostapd start
 sudo service dnsmasq start
